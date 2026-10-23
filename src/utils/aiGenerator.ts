@@ -200,22 +200,40 @@ export function parseUploadedDocumentQuestions(rawText: string, subjectName: str
 /**
  * Convert uploaded Word / PDF / Text document directly to CBT Questions
  */
+function normalizeSubjectKey(subjectName: string): string {
+  const value = (subjectName || '').toLowerCase();
+
+  if (/informatika|tik|teknologi informasi|it/.test(value)) return 'informatika';
+  if (/bahasa inggris|english/.test(value)) return 'bahasa-inggris';
+  if (/bahasa indonesia|indonesia/.test(value)) return 'bahasa-indonesia';
+  if (/ppkn|pkn|kewarganegaraan/.test(value)) return 'ppkn';
+  if (/ips|sosial/.test(value)) return 'ips';
+  if (/ipa|ilmu pengetahuan alam/.test(value)) return 'ipa';
+  if (/matematika|aljabar|geometri|aritmatika/.test(value)) return 'matematika';
+
+  return 'matematika';
+}
+
 export async function convertDocumentFileToQuestions(
   file: File,
   subjectName: string,
   grade: string
 ): Promise<Question[]> {
   try {
-    const base64 = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        const base64Content = result.split(',')[1] || result;
-        resolve(base64Content);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
+    let base64 = '';
+
+    if (typeof FileReader !== 'undefined') {
+      base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          const base64Content = result.split(',')[1] || result;
+          resolve(base64Content);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
 
     const res = await fetch('/api/convert-document', {
       method: 'POST',
@@ -426,7 +444,7 @@ function extractQuestionsFromRawText(text: string, subjectName: string, grade: a
  */
 function generateCurriculumSMPQuestions(req: AIGenerateRequest): Question[] {
   const result: Question[] = [];
-  const subjectId = req.subjectName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const subjectId = normalizeSubjectKey(req.subjectName);
   const count = Math.max(1, Math.min(30, req.questionCount || 5));
 
   // Subject-specific knowledge banks for high-grade educational output
@@ -523,6 +541,53 @@ function generateCurriculumSMPQuestions(req: AIGenerateRequest): Question[] {
         D: 'Memiliki pori-pori di seluruh tubuhnya',
         key: 'B',
         exp: 'Moluska adalah avertebrata bertubuh lunak tanpa segmen, banyak spesiesnya memiliki mantel pembentuk cangkang kalsium karbonat (misal siput & kerang).',
+      },
+    ],
+    informatika: [
+      {
+        text: 'Perangkat keras yang berfungsi sebagai otak komputer dan menjalankan instruksi program adalah...',
+        A: 'Monitor',
+        B: 'RAM',
+        C: 'CPU',
+        D: 'Keyboard',
+        key: 'C',
+        exp: 'CPU (Central Processing Unit) adalah unit pemrosesan utama yang menjalankan instruksi program dan mengendalikan operasi komputer.',
+      },
+      {
+        text: 'Urutan langkah logis untuk menyelesaikan masalah yang disusun secara sistematis disebut...',
+        A: 'Algoritma',
+        B: 'Browser',
+        C: 'Spreadsheet',
+        D: 'Firewall',
+        key: 'A',
+        exp: 'Algoritma adalah langkah-langkah logis dan sistematis yang dirancang untuk menyelesaikan suatu masalah atau tugas.',
+      },
+      {
+        text: 'Jaringan komputer yang mencakup area kecil seperti satu gedung atau satu sekolah disebut...',
+        A: 'WAN',
+        B: 'LAN',
+        C: 'MAN',
+        D: 'Internet',
+        key: 'B',
+        exp: 'LAN (Local Area Network) adalah jaringan lokal yang biasanya mencakup area terbatas seperti rumah, sekolah, atau kantor.',
+      },
+      {
+        text: 'Sistem operasi berfungsi untuk...',
+        A: 'Menyimpan data di cloud',
+        B: 'Menghubungkan komputer dengan printer',
+        C: 'Mengelola sumber daya komputer dan menjalankan aplikasi',
+        D: 'Mengubah file dokumen menjadi gambar',
+        key: 'C',
+        exp: 'Sistem operasi mengatur penggunaan CPU, memori, penyimpanan, serta menyediakan layanan dasar agar perangkat lunak dapat berjalan.',
+      },
+      {
+        text: 'Bahasa pemrograman yang umum digunakan untuk membuat situs web interaktif adalah...',
+        A: 'HTML',
+        B: 'CSS',
+        C: 'JavaScript',
+        D: 'PDF',
+        key: 'C',
+        exp: 'JavaScript adalah bahasa pemrograman yang digunakan untuk membuat interaksi dinamis pada halaman web, seperti validasi form dan animasi.',
       },
     ],
   };

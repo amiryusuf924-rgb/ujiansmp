@@ -4,7 +4,8 @@ export type SubjectId =
   | 'bahasa-indonesia'
   | 'bahasa-inggris'
   | 'ips'
-  | 'ppkn';
+  | 'ppkn'
+  | 'informatika';
 
 export interface SubjectMeta {
   id: SubjectId | string;
