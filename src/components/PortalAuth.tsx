@@ -44,7 +44,8 @@ export const PortalAuth: React.FC<PortalAuthProps> = ({
   const [studentError, setStudentError] = useState('');
 
   // Teacher State
-  const [inputNiy, setInputNiy] = useState('');
+  const [inputTeacherEmail, setInputTeacherEmail] = useState('');
+  const [inputTeacherPassword, setInputTeacherPassword] = useState('');
   const [teacherError, setTeacherError] = useState('');
   const [teacherSuccess, setTeacherSuccess] = useState('');
 
@@ -89,46 +90,44 @@ export const PortalAuth: React.FC<PortalAuthProps> = ({
     );
   };
 
-  // Teacher Login with NIY
+  // Teacher Login with email and password
   const handleTeacherSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setTeacherError('');
     setTeacherSuccess('');
 
-    const trimmedNiy = inputNiy.trim();
-    if (!trimmedNiy) {
-      setTeacherError('Silakan masukkan NIY Guru Anda.');
+    const trimmedEmail = inputTeacherEmail.trim().toLowerCase();
+    const trimmedPassword = inputTeacherPassword.trim();
+
+    if (!trimmedEmail) {
+      setTeacherError('Silakan masukkan email guru Anda.');
       return;
     }
 
-    // Match NIY with registered teachers, or allow standard teacher NIY entry
+    if (!trimmedPassword) {
+      setTeacherError('Silakan masukkan password guru.');
+      return;
+    }
+
     const foundTeacher = REGISTERED_TEACHERS.find(
-      (t) => t.niy.replace(/[\s-]/g, '') === trimmedNiy.replace(/[\s-]/g, '')
+      (t) => t.email?.trim().toLowerCase() === trimmedEmail
     );
 
-    if (foundTeacher) {
-      playNavigationSound();
-      setTeacherSuccess(`Berhasil login sebagai ${foundTeacher.name}. Mengalihkan...`);
-      setTimeout(() => {
-        onTeacherLogin(foundTeacher);
-      }, 500);
-    } else if (trimmedNiy.length >= 6) {
-      // Allow custom / yayasan NIY
-      const customTeacher: TeacherProfile = {
-        id: `t-${Date.now()}`,
-        name: 'Guru Mata Pelajaran',
-        niy: trimmedNiy,
-        subject: 'Mata Pelajaran SMP',
-        schoolName: 'SMP Negeri 1 Nusantara',
-      };
-      playNavigationSound();
-      setTeacherSuccess('Berhasil login ke Dashboard Guru.');
-      setTimeout(() => {
-        onTeacherLogin(customTeacher);
-      }, 500);
-    } else {
-      setTeacherError('Nomor Induk Yayasan (NIY) tidak valid.');
+    if (!foundTeacher) {
+      setTeacherError('Email guru tidak ditemukan atau belum terdaftar.');
+      return;
     }
+
+    if (foundTeacher.password && foundTeacher.password !== trimmedPassword) {
+      setTeacherError('Password yang Anda masukkan salah.');
+      return;
+    }
+
+    playNavigationSound();
+    setTeacherSuccess(`Berhasil login sebagai ${foundTeacher.name}. Mengalihkan...`);
+    setTimeout(() => {
+      onTeacherLogin(foundTeacher);
+    }, 500);
   };
 
   return (
@@ -315,7 +314,7 @@ export const PortalAuth: React.FC<PortalAuthProps> = ({
               Login Guru
             </h2>
             <p className="text-xs text-slate-500 mt-1">
-              Masukkan Nomor Induk Yayasan (NIY) Anda.
+              Masukkan email dan password Anda.
             </p>
           </div>
 
@@ -336,19 +335,38 @@ export const PortalAuth: React.FC<PortalAuthProps> = ({
           <form onSubmit={handleTeacherSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                Nomor Induk Yayasan (NIY) <span className="text-rose-500">*</span>
+                Email <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                   <UserCheck className="w-4 h-4" />
                 </div>
                 <input
-                  type="text"
+                  type="email"
                   required
-                  value={inputNiy}
-                  onChange={(e) => setInputNiy(e.target.value)}
-                  placeholder="Masukkan NIY Guru Anda..."
-                  className="w-full pl-10 pr-3.5 py-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                  value={inputTeacherEmail}
+                  onChange={(e) => setInputTeacherEmail(e.target.value)}
+                  placeholder="Masukkan email guru Anda..."
+                  className="w-full pl-10 pr-3.5 py-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                Password <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <input
+                  type="password"
+                  required
+                  value={inputTeacherPassword}
+                  onChange={(e) => setInputTeacherPassword(e.target.value)}
+                  placeholder="Masukkan password guru..."
+                  className="w-full pl-10 pr-3.5 py-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
                 />
               </div>
             </div>

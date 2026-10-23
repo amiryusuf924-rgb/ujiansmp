@@ -49,7 +49,9 @@ export interface StudentProfile {
 export interface TeacherProfile {
   id: string;
   name: string;
-  niy: string; // Nomor Induk Yayasan / NIP Guru
+  niy?: string; // Nomor Induk Yayasan / NIP Guru
+  email?: string;
+  password?: string;
   subject: string;
   schoolName?: string;
 }

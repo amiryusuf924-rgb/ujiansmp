@@ -3,6 +3,15 @@ import { ExamCode, TeacherProfile } from '../types/quiz.ts';
 export const REGISTERED_TEACHERS: TeacherProfile[] = [
   {
     id: 't-1',
+    name: 'Amir Yusuf S.Kom',
+    niy: '19901101201501',
+    email: 'amir77@gmail.com',
+    password: '123',
+    subject: 'Teknologi Informasi',
+    schoolName: 'SMP Negeri 1 Nusantara',
+  },
+  {
+    id: 't-1a',
     name: 'Bambang Suryono, S.Pd.',
     niy: '19850412201001',
     subject: 'Matematika SMP',

@@ -1,5 +1,202 @@
 import { AIGenerateRequest, OptionKey, Question } from '../types/quiz.ts';
 
+export async function extractTextFromUploadedFile(file: File): Promise<string> {
+  const filename = file.name.toLowerCase();
+
+  try {
+    if (filename.endsWith('.txt')) {
+      return await file.text();
+    }
+
+    if (filename.endsWith('.docx')) {
+      const mammoth = await import('mammoth');
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer });
+      return result.value || '';
+    }
+
+    if (filename.endsWith('.pdf')) {
+      const pdfjs = await import('pdfjs-dist');
+      const workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+      pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjs.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
+      const pages: string[] = [];
+
+      for (let i = 1; i <= pdf.numPages; i += 1) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items
+          .map((item: any) => ('str' in item ? item.str : ''))
+          .join(' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (pageText) pages.push(pageText);
+      }
+
+      return pages.join('\n\n');
+    }
+
+    if (filename.endsWith('.doc')) {
+      const raw = await file.text();
+      return raw || '';
+    }
+
+    return await file.text();
+  } catch (error) {
+    console.warn('Local document extraction failed:', error);
+    return '';
+  }
+}
+
+export function parseUploadedDocumentQuestions(rawText: string, subjectName: string, grade: string): Question[] {
+  const normalized = (rawText || '')
+    .replace(/\u00a0/g, ' ')
+    .replace(/\r/g, '\n')
+    .replace(/\t/g, ' ')
+    .replace(/\s+\n/g, '\n')
+    .trim();
+
+  if (!normalized) return [];
+
+  const blocks: string[] = [];
+  const lines = normalized.split('\n').map((line) => line.trim()).filter(Boolean);
+  let currentBlock: string[] = [];
+
+  const isQuestionStart = (line: string) => {
+    const trimmed = line.toLowerCase();
+    return /^(?:\[\s*soal\s*\d+\s*\]|soal\s*\d+|nomor\s+\d+|question\s*\d+|q\s*\d+|\d+[\.)])/.test(trimmed)
+      || /^\[?\s*soal\s*\d+\]?\s*[:.\-]*/.test(trimmed)
+      || /^\d+[\.)]\s+/.test(trimmed);
+  };
+
+  for (const line of lines) {
+    if (isQuestionStart(line)) {
+      if (currentBlock.length) {
+        blocks.push(currentBlock.join('\n'));
+      }
+      currentBlock = [line];
+      continue;
+    }
+
+    if (currentBlock.length) {
+      currentBlock.push(line);
+    }
+  }
+
+  if (currentBlock.length) {
+    blocks.push(currentBlock.join('\n'));
+  }
+
+  if (blocks.length === 0) {
+    blocks.push(normalized);
+  }
+
+  const questions: Question[] = [];
+
+  for (const block of blocks) {
+    const optionEntries: Partial<Record<OptionKey, string>> = {};
+    const noMarkdown = block
+      .replace(/\*\*/g, '')
+      .replace(/\*/g, '')
+      .replace(/\_/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!noMarkdown) continue;
+
+    const questionLines = block.split('\n');
+    const explanationMatch = block.match(/(?:pembahasan|penjelasan|cara|explanation)\s*[:\-]?\s*(.+)$/is);
+    const explanation = explanationMatch ? explanationMatch[1].trim() : 'Pembahasan disesuaikan dengan materi yang terdeteksi dari dokumen upload.';
+
+    const optionPattern = /^([A-D])\s*[\.)]\s*(.+)$/i;
+    let lastOptionLetter: OptionKey | null = null;
+    let detectedKey: OptionKey = 'A';
+
+    for (const line of questionLines) {
+      const trimmedLine = line.trim();
+
+      if (/kunci\s+jawaban|jawaban\s+benar|answer/i.test(trimmedLine)) {
+        if (lastOptionLetter) {
+          detectedKey = lastOptionLetter;
+        }
+        continue;
+      }
+
+      const match = trimmedLine.match(optionPattern);
+      if (match) {
+        const letter = match[1].toUpperCase() as OptionKey;
+        lastOptionLetter = letter;
+        const value = match[2]
+          .replace(/\s*(?:KUNCI\s+JAWABAN|JAWABAN\s+BENAR|KUNCI|ANSWER)\s*$/i, '')
+          .trim();
+        optionEntries[letter] = value;
+      }
+
+      const explicitKeyMatch = trimmedLine.match(/(?:\bkey\b|\bjawaban\b)\s*[:\-]?\s*([A-D])/i);
+      if (explicitKeyMatch) {
+        detectedKey = explicitKeyMatch[1].toUpperCase() as OptionKey;
+      }
+    }
+
+    let questionText = '';
+    const firstLine = questionLines[0]?.trim() || '';
+    if (/^(?:\[\s*soal\s*\d+\s*\]|soal\s*\d+|nomor\s+\d+|question\s*\d+|q\s*\d+|\d+[\.)])/.test(firstLine.toLowerCase())) {
+      questionText = firstLine
+        .replace(/^(?:\[\s*soal\s*\d+\s*\]|soal\s*\d+|nomor\s+\d+|question\s*\d+|q\s*\d+|\d+[\.)])\s*[:.\-]?\s*/i, '')
+        .trim();
+    }
+
+    if (!questionText && questionLines.length > 1) {
+      const preOptionLines = questionLines.filter((line) => !/^([A-D])\s*[\.)]/i.test(line.trim()));
+      const questionCandidate = preOptionLines
+        .join(' ')
+        .replace(/^(?:\[\s*soal\s*\d+\s*\]|soal\s*\d+|nomor\s+\d+|question\s*\d+|q\s*\d+)\s*[:.\-]?\s*/i, '')
+        .replace(/\s+(?:sedang|mudah|sulit)\s*$/i, '')
+        .trim();
+      questionText = questionCandidate;
+    }
+
+    // Remove label fragments that are not part of the question
+    questionText = questionText
+      .replace(/^(?:nomor|soal|question)\s*\d+\s*[:.\-]?\s*/i, '')
+      .replace(/\s+(?:sedang|mudah|sulit)\s*$/i, '')
+      .trim();
+
+    const hasValidOptions = ['A', 'B', 'C', 'D'].every((key) => !!optionEntries[key as OptionKey]);
+
+    if (!questionText || !hasValidOptions) {
+      continue;
+    }
+
+    const finalAnswer = optionEntries[detectedKey] ? detectedKey : Object.keys(optionEntries).find((key) => {
+      const matchedLetter = key as OptionKey;
+      return optionEntries[matchedLetter]?.toLowerCase().includes('kunci');
+    }) || 'A';
+
+    questions.push({
+      id: `q-doc-${Date.now()}-${questions.length}`,
+      subjectId: subjectName.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      subjectName,
+      grade: grade as any,
+      topic: `Materi ${subjectName}`,
+      questionText,
+      options: {
+        A: optionEntries.A || 'Pilihan A',
+        B: optionEntries.B || 'Pilihan B',
+        C: optionEntries.C || 'Pilihan C',
+        D: optionEntries.D || 'Pilihan D',
+      },
+      correctAnswer: finalAnswer as OptionKey,
+      explanation,
+      difficulty: 'Sedang',
+    });
+  }
+
+  return questions;
+}
+
 /**
  * Convert uploaded Word / PDF / Text document directly to CBT Questions
  */
@@ -55,6 +252,12 @@ export async function convertDocumentFileToQuestions(
     }
   } catch (err) {
     console.warn('Document conversion fallback:', err);
+  }
+
+  const extractedText = await extractTextFromUploadedFile(file);
+  const localQuestions = parseUploadedDocumentQuestions(extractedText, subjectName, grade);
+  if (localQuestions.length > 0) {
+    return localQuestions;
   }
 
   return generateCurriculumSMPQuestions({
